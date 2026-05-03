@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, repositories, repositoryStats, repositoryIntelligence, metricsTechnical, metricsFinancial, metricsImpact, actionPlanItems } from "../drizzle/schema";
+import { InsertRepository, InsertRepositoryStats, InsertRepositoryIntelligence, InsertMetricsTechnical, InsertMetricsFinancial, InsertMetricsImpact, InsertActionPlanItem } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +90,161 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+/**
+ * Repository queries
+ */
+export async function getAllRepositories() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(repositories);
+}
+
+export async function getRepositoryWithStats(repoId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db
+    .select()
+    .from(repositories)
+    .leftJoin(repositoryStats, eq(repositories.id, repositoryStats.repositoryId))
+    .leftJoin(repositoryIntelligence, eq(repositories.id, repositoryIntelligence.repositoryId))
+    .where(eq(repositories.id, repoId))
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function upsertRepository(repo: InsertRepository) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(repositories).values(repo).onDuplicateKeyUpdate({
+    set: {
+      name: repo.name,
+      description: repo.description,
+      url: repo.url,
+      visibility: repo.visibility,
+      language: repo.language,
+      lastUpdated: repo.lastUpdated,
+      syncedAt: new Date(),
+    },
+  });
+}
+
+export async function upsertRepositoryStats(stats: InsertRepositoryStats) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(repositoryStats).values(stats).onDuplicateKeyUpdate({
+    set: {
+      starCount: stats.starCount,
+      forkCount: stats.forkCount,
+      openIssuesCount: stats.openIssuesCount,
+      watchers: stats.watchers,
+      lastCommitDate: stats.lastCommitDate,
+      commitCount: stats.commitCount,
+      updatedAt: new Date(),
+    },
+  });
+}
+
+export async function upsertRepositoryIntelligence(intel: InsertRepositoryIntelligence) {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db
+    .select()
+    .from(repositoryIntelligence)
+    .where(eq(repositoryIntelligence.repositoryId, intel.repositoryId))
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db
+      .update(repositoryIntelligence)
+      .set({
+        purpose: intel.purpose,
+        category: intel.category,
+        healthScore: intel.healthScore,
+        tags: intel.tags,
+        generatedAt: new Date(),
+      })
+      .where(eq(repositoryIntelligence.repositoryId, intel.repositoryId));
+  } else {
+    await db.insert(repositoryIntelligence).values(intel);
+  }
+}
+
+/**
+ * Metrics queries
+ */
+export async function getTechnicalMetrics() {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(metricsTechnical).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getFinancialMetrics() {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(metricsFinancial).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getImpactMetrics() {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(metricsImpact).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function upsertTechnicalMetrics(metrics: InsertMetricsTechnical) {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select().from(metricsTechnical).limit(1);
+  if (existing.length > 0) {
+    await db.update(metricsTechnical).set(metrics).limit(1);
+  } else {
+    await db.insert(metricsTechnical).values(metrics);
+  }
+}
+
+export async function upsertFinancialMetrics(metrics: InsertMetricsFinancial) {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select().from(metricsFinancial).limit(1);
+  if (existing.length > 0) {
+    await db.update(metricsFinancial).set(metrics).limit(1);
+  } else {
+    await db.insert(metricsFinancial).values(metrics);
+  }
+}
+
+export async function upsertImpactMetrics(metrics: InsertMetricsImpact) {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select().from(metricsImpact).limit(1);
+  if (existing.length > 0) {
+    await db.update(metricsImpact).set(metrics).limit(1);
+  } else {
+    await db.insert(metricsImpact).values(metrics);
+  }
+}
+
+/**
+ * Action plan queries
+ */
+export async function getActionPlanItems() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(actionPlanItems).orderBy(actionPlanItems.week);
+}
+
+export async function upsertActionPlanItem(item: InsertActionPlanItem) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(actionPlanItems).values(item).onDuplicateKeyUpdate({
+    set: {
+      title: item.title,
+      description: item.description,
+      completed: item.completed,
+      priority: item.priority,
+      updatedAt: new Date(),
+    },
+  });
+}
