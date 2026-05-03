@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   fetchOrganizationRepositories,
   fetchRepositoryStats,
@@ -6,14 +6,21 @@ import {
   fetchCommitCount,
 } from "./github";
 
+// Mock global fetch
+const originalFetch = global.fetch;
+
 describe("GitHub API Client", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
   describe("fetchOrganizationRepositories", () => {
     it("should fetch public repositories from organization", async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce({
+      const mockResponse = {
         ok: true,
         json: async () => [
           {
@@ -33,7 +40,14 @@ describe("GitHub API Client", () => {
             watchers_count: 100,
           },
         ],
-      });
+      };
+
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(mockResponse)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => [],
+        });
 
       const repos = await fetchOrganizationRepositories();
 
